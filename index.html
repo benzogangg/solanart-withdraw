@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The page may only load its own files (incl. offers.json) and talk to the two public Solana RPCs below. Nothing else. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https://solana-rpc.publicnode.com wss://solana-rpc.publicnode.com https://api.mainnet-beta.solana.com wss://api.mainnet-beta.solana.com; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Solanart Offer Withdraw</title>
+<script src="antiframe.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <h1>Withdraw SOL from your old Solanart offers</h1>
+  <p class="sub">Unofficial, open-source page, not affiliated with Solanart.
+    When you made an offer on Solanart, its SOL was locked in a separate on-chain account.
+    The Solanart website no longer shows many of these offers, but the program still lets their maker cancel them.
+    This page finds every open offer made by your wallet and sends the same <b>Cancel Bid</b> instruction.
+    The SOL goes to your own wallet, and you sign the transactions yourself.</p>
+
+  <div class="card">
+    <div class="row"><span>Wallet</span><span class="mono" id="wallet">not connected</span></div>
+    <div class="row"><span>Open offers</span><span id="count">—</span></div>
+    <div class="row"><span>Transaction check</span><span id="sim">—</span></div>
+    <div class="amt">
+      <div class="lbl">Locked in your offers</div>
+      <div class="big" id="amount">—</div>
+    </div>
+    <div id="offers"></div>
+  </div>
+
+  <button id="connect">Connect wallet</button>
+  <button id="withdraw" disabled>Withdraw to my wallet</button>
+
+  <div class="card"><div id="log">Connect Phantom, Solflare or Backpack.</div></div>
+
+  <details>
+    <summary>Check any address without connecting</summary>
+    <p>Read-only: lists the wallet's open Solanart offers and simulates withdrawing them. Nothing is signed.</p>
+    <input id="probe" placeholder="wallet address" autocomplete="off" spellcheck="false">
+    <button class="sec" id="probeBtn">Check</button>
+  </details>
+  <details>
+    <summary>What exactly you sign</summary>
+    <p>Only instructions of the Solanart program <span class="mono">CJsLwbP1iu5DuUikHEJnLfANgKy6stB2uFgvBBHoyxwz</span>,
+      Cancel Bid (data <span class="mono">03</span>), one per offer, up to 8 per transaction.
+      Each one closes an offer account that your wallet created and sends its SOL to your wallet.
+      The small account rent (0.0025 SOL per offer) goes back to the refund address stored in the offer,
+      which is normally your wallet too.
+      There are no token approvals and no transfers to anyone else. Network fee is 0.000005 SOL per transaction.
+      Your wallet shows its own simulation before you sign.</p>
+  </details>
+  <p class="foot" id="indexNote"></p>
+  <p class="foot">Source code and how to verify it: see the repository this page is served from.</p>
+</main>
+<script src="web3.iife.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
