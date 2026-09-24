@@ -31,6 +31,9 @@ open offers grouped by maker, built by `build_index.py`. The page uses it only t
 to look at. It then re-reads every account on-chain and keeps it only if it is still owned by Solanart,
 is 233 bytes long, and has your wallet as maker. Offers made after the list date are not shown.
 
+If your wallet is only the refund address of an offer (another wallet made it), the page lists that
+offer separately and names the maker wallet: only the maker can withdraw it, and the SOL goes to the maker.
+
 To refresh the list:
 
 ```

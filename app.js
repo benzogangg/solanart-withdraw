@@ -49,7 +49,8 @@ async function rpc() {
 
 // Public RPCs refuse to search the Solana program from a browser, so offers.json (built by
 // build_index.py) says which accounts to look at. Each one is re-read on-chain here and kept
-// only if it is still a live Solanart offer whose maker (@97) is this wallet.
+// only if it is still a live Solanart offer whose maker (@97) is this wallet. Offers where this
+// wallet is only the rent-refund address (@1) are returned separately, as "other": another wallet made them.
 let index;
 async function findOffers(pk) {
   if (!index) {
@@ -57,7 +58,8 @@ async function findOffers(pk) {
     $("indexNote").textContent = "Offer list updated " + index.generated.replace("T", " ")
       + ". Offers made after that are not shown yet.";
   }
-  const keys = (index.makers[pk.toBase58()] || []).map(k => new W.PublicKey(k));
+  const a58 = pk.toBase58();
+  const keys = [...new Set([...(index.makers[a58] || []), ...(index.refunds[a58] || [])])].map(k => new W.PublicKey(k));
   const c = await rpc(), out = [];
   for (let i = 0; i < keys.length; i += 10) {           // publicnode serves at most 10 per call
     const infos = await c.getMultipleAccountsInfo(keys.slice(i, i + 10), "confirmed");
@@ -69,7 +71,9 @@ async function findOffers(pk) {
         maker: new W.PublicKey(d.slice(97, 129)) });
     });
   }
-  return out.filter(o => o.maker.equals(pk)).sort((a, b) => b.lamports - a.lamports);
+  out.sort((a, b) => b.lamports - a.lamports);
+  return { own: out.filter(o => o.maker.equals(pk)),
+           other: out.filter(o => !o.maker.equals(pk) && o.refund.equals(pk)) };
 }
 
 function cancelIx(pk, o) {
@@ -100,33 +104,39 @@ async function simulate(pk, group) {
   return sim.value.err;
 }
 
-function showOffers(list) {
+function offerRow(o, note) {
+  const row = document.createElement("div"); row.className = "row";
+  const a = document.createElement("a");
+  a.href = "https://solscan.io/account/" + o.offer.toBase58();
+  a.target = "_blank"; a.rel = "noopener noreferrer"; a.className = "mono";
+  a.textContent = "offer " + short(o.offer.toBase58()) + " · NFT " + short(o.mint.toBase58()) + (note || "");
+  const v = document.createElement("span"); v.textContent = sol(o.lamports - RENT);
+  row.append(a, v);
+  return row;
+}
+
+function showOffers(own, other) {
   const box = $("offers");
-  box.replaceChildren();
-  for (const o of list) {
-    const row = document.createElement("div"); row.className = "row";
-    const a = document.createElement("a");
-    a.href = "https://solscan.io/account/" + o.offer.toBase58();
-    a.target = "_blank"; a.rel = "noopener noreferrer"; a.className = "mono";
-    a.textContent = "offer " + short(o.offer.toBase58()) + " · NFT " + short(o.mint.toBase58());
-    const v = document.createElement("span"); v.textContent = sol(o.lamports - RENT);
-    row.append(a, v); box.appendChild(row);
-  }
+  box.replaceChildren(...own.map(o => offerRow(o)));
+  if (!other.length) return;
+  const h = document.createElement("div"); h.className = "lbl";
+  h.textContent = "Made by another wallet — only that wallet can withdraw them:";
+  box.append(h, ...other.map(o => offerRow(o, " · maker " + short(o.maker.toBase58()))));
 }
 
 async function inspect(pk) {
-  const list = await findOffers(pk);
+  const { own: list, other } = await findOffers(pk);
   const total = list.reduce((s, o) => s + o.lamports - RENT, 0);
   $("count").textContent = String(list.length);
   $("amount").textContent = list.length ? sol(total) : "—";
-  showOffers(list);
-  if (!list.length) { setSim("no open offers", "bad"); return { list, ok: false }; }
+  showOffers(list, other);
+  if (!list.length) { setSim("no open offers", "bad"); return { list, other, ok: false }; }
   for (const g of chunks(list)) {
     const err = await simulate(pk, g);
-    if (err) { setSim("error: " + JSON.stringify(err), "bad"); return { list, ok: false, err }; }
+    if (err) { setSim("error: " + JSON.stringify(err), "bad"); return { list, other, ok: false, err }; }
   }
   setSim("passes ✓", "ok");
-  return { list, ok: true };
+  return { list, other, ok: true };
 }
 
 // Last check before the wallet sees a transaction: only Solanart Cancel Bid instructions,
@@ -140,6 +150,14 @@ function assertSafe(tx, pk) {
       && k[3].pubkey.equals(o.mint) && !k[3].isSigner && k[4].pubkey.equals(W.SystemProgram.programId);
   });
   if (!ok) throw new Error("safety check failed, transaction not sent");
+}
+
+// This wallet made no offers but is the rent-refund address of offers another wallet made.
+function otherMsg(other) {
+  const makers = [...new Set(other.map(o => o.maker.toBase58()))];
+  return "This wallet did not make these offers; it only gets their small rent refund. "
+    + "The SOL (" + sol(other.reduce((t, o) => t + o.lamports - RENT, 0)) + ") goes to the wallet that made them. "
+    + "Open this page with " + (makers.length > 1 ? "one of these wallets" : "that wallet") + " to withdraw:\n" + makers.join("\n");
 }
 
 function pickProvider() {
@@ -158,7 +176,7 @@ $("connect").onclick = async () => {
     offers = s.list;
     const n = chunks(offers).length;
     const bal = await (await rpc()).getBalance(owner);
-    if (!offers.length) log("This wallet has no open Solanart offers.", "bad");
+    if (!offers.length) log(s.other.length ? otherMsg(s.other) : "This wallet has no open Solanart offers.", "bad");
     else if (!s.ok) log("Simulation failed — do not sign. Details are in the browser console.", "bad");
     else if (bal < 10000 * n) log("Not enough SOL in the wallet for the network fee (need ~" + sol(5000 * n) + ").", "bad");
     else {
@@ -215,6 +233,6 @@ $("probeBtn").onclick = async () => {
     log("Checking…");
     const s = await inspect(pk);
     log(s.ok ? "Withdrawing these offers passes simulation. Only the wallet's owner can sign it."
-             : s.list.length ? "Simulation failed." : "No open Solanart offers for this wallet.", s.ok ? "ok" : "bad");
+             : s.list.length ? "Simulation failed." : s.other.length ? otherMsg(s.other) : "No open Solanart offers for this wallet.", s.ok ? "ok" : "bad");
   } catch (e) { log("Error: " + (e.message || e), "bad"); }
 };
