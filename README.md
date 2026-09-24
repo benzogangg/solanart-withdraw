@@ -1,5 +1,9 @@
 # Solanart offer withdraw
 
+**Open the page: https://benzogangg.github.io/solanart-withdraw/**
+
+It's served by GitHub Pages straight from this repository, so the page is exactly the code you see here.
+
 Unofficial, open-source page that returns SOL locked in old Solanart offers to the wallet that made them.
 Not affiliated with Solanart.
 
